@@ -1,0 +1,24 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: ethereum-node1-svc
+  namespace: default
+  labels:
+    name: ethereum-node1-svc
+spec:
+  selector:
+    app: ethereum-poa
+    name: ethereum-node1-deployment
+  ports:
+    - name: node1-jsonrpc
+      protocol: TCP
+      port: 8545
+      targetPort: 8545
+    - name: node1-tcp-ipc-discovery
+      protocol: TCP
+      port: 30303
+      targetPort: 30303
+    - name: node1-ipc-discovery
+      protocol: UDP
+      port: 30303
+      targetPort: 30303

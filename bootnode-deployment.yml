@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: ethereum-bootnode-controller
+  namespace: default
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: ethereum-poa
+        name: ethereum-bootnode-controller
+    spec:
+      containers:
+      - name: ethereum-bootnode
+        image: ethereum/client-go:alltools-v1.8.2
+        command: ["bootnode"]
+        args: ["--nodekey","/opt/bootnode/boot.key","--verbosity=9"]
+        ports:
+        - containerPort: 30301
+          protocol: UDP
+        volumeMounts:
+        - name: bootkey-config-volume
+          mountPath: /opt/bootnode/
+      volumes:
+      - name: bootkey-config-volume
+        configMap:
+          name: bootkey-config
+          items:
+          - key: boot.key
+            path: boot.key

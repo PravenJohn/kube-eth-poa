@@ -1,0 +1,17 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: ethereum-bootnode-svc
+  namespace: default
+  labels:
+    app: ethereum-poa
+    name: ethereum-bootnode-svc
+spec:
+  selector:
+    app: ethereum-poa
+    name: ethereum-bootnode-controller
+  ports:
+    - name: bootnode
+      protocol: UDP
+      port: 30301
+      targetPort: 30301

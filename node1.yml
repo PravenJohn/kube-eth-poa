@@ -1,0 +1,104 @@
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: ethereum-node1-svc
+  namespace: default
+  labels:
+    name: ethereum-node1-svc
+spec:
+  selector:
+    app: ethereum-poa
+    name: ethereum-node1-deployment
+  type: NodePort
+  ports:
+    - name: node1-jsonrpc
+      protocol: TCP
+      port: 8545
+      targetPort: 8545
+      nodePort: 30545
+    - name: node1-tcp-ipc-discovery
+      protocol: TCP
+      port: 30303
+      targetPort: 30303
+    - name: node1-ipc-discovery
+      protocol: UDP
+      port: 30303
+      targetPort: 30303
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: ethereum-node1-deployment
+  namespace: default
+spec:
+  strategy:
+    type: RollingUpdate
+  replicas: 1
+  template:
+    metadata:
+      name: ethereum-node1-deployment
+      labels:
+        app: ethereum-poa
+        name: ethereum-node1-deployment
+    spec:
+      initContainers:
+      - name: ethereum-node1-genesis-init
+        image: ethereum/client-go:v1.8.2
+        command: ["sh"]
+        args: 
+        - "-cx"
+        - "if [ ! -d /root/.ethereum/password ]; then
+            echo poaether-node1 > /root/.ethereum/password;
+            echo 6c7fb049101e563b81c26cb590800169315e6685 > /root/.ethereum/password_hash;
+            mkdir /root/.ethereum/keystore;
+            echo '{\"address\":\"6c7fb049101e563b81c26cb590800169315e6685\",\"crypto\":{\"cipher\":\"aes-128-ctr\",\"ciphertext\":\"0dc6884fa509517cb7eafceec6bf8a511999d3e3d787915a165d73ccc105c250\",\"cipherparams\":{\"iv\":\"ace65d3974c7341c57dcc2c446206d3c\"},\"kdf\":\"scrypt\",\"kdfparams\":{\"dklen\":32,\"n\":262144,\"p\":1,\"r\":8,\"salt\":\"aba13c32eef5b4f9712c2ca16a647cf9eed26df2e4331466b5a43aa98616c729\"},\"mac\":\"ae3a70da788f34c00b65df0d4a6d2bc73b238031020524834f86f2fba352a464\"},\"id\":\"b0c778d3-38c6-417b-9e50-639bde07199d\",\"version\":3}' > /root/.ethereum/keystore/UTC--2018-05-10T14-31-25.576309235Z--6c7fb049101e563b81c26cb590800169315e6685;
+            geth init /opt/genesis/genesis.json;
+          fi;"
+        ports:
+        - containerPort: 8545
+        - containerPort: 30303
+        - containerPort: 30303
+          protocol: UDP
+        volumeMounts:
+        - name: genesis-config-volume
+          mountPath: /opt/genesis/
+        - name: node1-persistent-storage
+          mountPath: /root/.ethereum
+      volumes:
+      - name: genesis-config-volume
+        configMap:
+          name: genesis-config
+          items:
+          - key: genesis.json
+            path: genesis.json
+      - name: node1-persistent-storage
+        hostPath:
+          path: /var/lib/docker/geth-storage/node1
+      containers:
+      - name: ethereum-node1
+        image: ethereum/client-go:v1.8.2
+        command: ["sh"]
+        args:
+        - "-cx"
+        - 'geth --bootnodes=enode://b616c6cf43c314268cf3e01378bf794220fed5ce2da77bbc8d9413c306fb9e680e514aaf5f18a5d5c428707e8a13fbd7a405b604a65c9ce51932b5e2125a9573@$(ETHEREUM_BOOTNODE_SVC_SERVICE_HOST):30301 --rpc --rpcaddr=0.0.0.0 --rpcapi=personal,db,eth,net,web3,txpool,miner --rpccorsdomain "*" --cache=512 --verbosity=4 --maxpeers=3 --syncmode "full" --networkid 1981 --gasprice 0 --unlock 0x6c7fb049101e563b81c26cb590800169315e6685 --password /root/.ethereum/password --mine'
+        ports:
+        - containerPort: 8545
+        - containerPort: 30303
+        - containerPort: 30303
+          protocol: UDP
+        volumeMounts:
+        - name: genesis-config-volume
+          mountPath: /opt/genesis/
+        - name: node1-persistent-storage
+          mountPath: /root/.ethereum
+      volumes:
+      - name: genesis-config-volume
+        configMap:
+          name: genesis-config
+          items:
+          - key: genesis.json
+            path: genesis.json
+      - name: node1-persistent-storage
+        hostPath:
+          path: /var/lib/docker/geth-storage/node1

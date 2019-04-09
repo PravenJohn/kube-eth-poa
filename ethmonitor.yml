@@ -1,0 +1,135 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: eth-monitor-config
+  namespace: default
+  labels:
+    app: kuberneteth
+    name: eth-monitor-config
+data:
+  app.json: |-
+    [
+      {
+        "name"              : "Private Node1",
+        "cwd"               : ".",
+        "script"            : "app.js",
+        "log_date_format"   : "YYYY-MM-DD HH:mm Z",
+        "merge_logs"        : false,
+        "watch"             : false,
+        "exec_interpreter"  : "node",
+        "exec_mode"         : "fork_mode",
+        "env":
+        {
+          "NODE_ENV"        : "production",
+          "RPC_HOST"        : "node1-rpchost",
+          "RPC_PORT"        : "8545",
+          "INSTANCE_NAME"   : "Private Node1",
+          "WS_SERVER"       : "localhost:3001",
+          "WS_SECRET"       : "connectme",
+        }
+      },
+      {
+        "name"              : "Private Node2",
+        "cwd"               : ".",
+        "script"            : "app.js",
+        "log_date_format"   : "YYYY-MM-DD HH:mm Z",
+        "merge_logs"        : false,
+        "watch"             : false,
+        "exec_interpreter"  : "node",
+        "exec_mode"         : "fork_mode",
+        "env":
+        {
+          "NODE_ENV"        : "production",
+          "RPC_HOST"        : "node1-rpchost",
+          "RPC_PORT"        : "8545",
+          "INSTANCE_NAME"   : "Private Node2",
+          "WS_SERVER"       : "localhost:3001",
+          "WS_SECRET"       : "connectme",
+        }
+      }
+    ]
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: eth-monitor-svc
+  namespace: default
+  labels:
+    app: kuberneteth
+    tier: frontend
+    name: eth-monitor-svc
+spec:
+  selector:
+    app: kuberneteth
+    tier: frontend
+  type: NodePort
+  ports:
+    - name: eth-monitor-port
+      protocol: TCP
+      port: 3001
+      nodePort: 30001
+
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: eth-monitor-deployment
+  namespace: default
+spec:
+  strategy:
+    type: Recreate
+  replicas: 1
+  template:
+    metadata:
+      name: eth-monitor-deployment
+      labels:
+        app: kuberneteth
+        tier: frontend
+        name: eth-monitor-deployment
+    spec:
+      initContainers:
+      - name: eth-monitor-init-container
+        image: mmeister/eth-net-intelligence-api
+        command: [ "sh" ]
+        args:
+        - "-cx"
+        - "cp -r /eth-net-intelligence-api/* /ethmonitor;
+           cp /eth-monitor-configmap/app.json /ethmonitor/app.json;
+           sed -i \"s/node1-rpchost/$ETHEREUM_NODE1_SVC_SERVICE_HOST/g\" /ethmonitor/app.json;
+           sed -i \"s/node2-rpchost/$ETHEREUM_NODE2_SVC_SERVICE_HOST/g\" /ethmonitor/app.json;
+           exit 0;"
+        volumeMounts:
+        - name: eth-monitor-configmap-volume
+          mountPath: /eth-monitor-configmap/app.json
+          subPath: app.json
+          # we need to mount an extra volume to be able to change a value in the configmap
+        - name: eth-monitor-config-persistent-storage
+          mountPath: /ethmonitor
+      containers:
+      - name: eth-netstats-container
+        image: mmeister/eth-netstats
+        ports:
+          - containerPort: 3001
+        env:
+        - name: WS_SECRET
+          value: "connectme"
+        - name: PORT
+          value: "3001"
+      - name: eth-net-intelligence-api-container
+        image: mmeister/eth-net-intelligence-api
+        volumeMounts:
+        - name: eth-monitor-config-persistent-storage
+          mountPath: /eth-net-intelligence-api/app.json
+          subPath: app.json
+      volumes:
+      - name: eth-monitor-configmap-volume
+        configMap:
+          name: eth-monitor-config
+          items:
+          - key: app.json
+            path: app.json
+      - name: eth-monitor-config-persistent-storage
+        hostPath:
+          path: /var/lib/docker/geth-storage/ethmonitor
